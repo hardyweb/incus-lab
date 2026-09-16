@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <title>Incus Lab</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>Incus Lab</h1>
+    <p>Belajar <code>ping</code> dan <code>nmap</code> guna container sebenar.</p>
+    <div id="incus-status">
+      <span class="status-indicator"></span>
+      <span class="status-text">Menunggu Incus...</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Panel kiri: kawalan -->
+    <section class="panel controls">
+      <h2>Lab</h2>
+      <button id="btn-create">Create Lab</button>
+      <button id="btn-destroy" class="danger">Destroy Lab</button>
+      <button id="btn-refresh">Refresh</button>
+
+      <h2>Scan (nmap)</h2>
+      <label>Target:
+        <select id="scan-target">
+          <option value="lab-target">lab-target</option>
+        </select>
+      </label>
+      <button id="btn-scan">Run nmap</button>
+
+      <h2>Ping</h2>
+      <label>Dari:
+        <select id="ping-source">
+          <option value="lab-scanner">lab-scanner</option>
+          <option value="lab-target">lab-target</option>
+        </select>
+      </label>
+      <label>Ke:
+        <select id="ping-target">
+          <option value="lab-target">lab-target</option>
+          <option value="lab-scanner">lab-scanner</option>
+        </select>
+      </label>
+      <button id="btn-ping">Run ping</button>
+
+      <h2>Connectivity</h2>
+      <label>Container:
+        <select id="conn-target">
+          <option value="lab-scanner">lab-scanner</option>
+          <option value="lab-target">lab-target</option>
+        </select>
+      </label>
+      <button id="btn-ip-addr">ip addr</button>
+      <button id="btn-ip-route">ip route</button>
+      <button id="btn-ip-neigh">ip neigh</button>
+    </section>
+
+    <!-- Panel tengah: topology -->
+    <section class="panel topology">
+      <h2>Topology</h2>
+      <div id="topology" class="topology-grid">
+        <svg id="topology-svg" class="topology-svg">
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="rgba(79, 140, 255, 0.45)"/>
+            </marker>
+            <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#4f8cff" class="active"/>
+            </marker>
+            <marker id="arrowhead-ping" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#f472b6" class="ping"/>
+            </marker>
+          </defs>
+        </svg>
+        <div id="topology-nodes" class="topology-nodes">
+          <p class="empty">Tekan <strong>Create Lab</strong> untuk mula.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel kanan: command log -->
+    <section class="panel log">
+      <h2>Command log</h2>
+      <p class="hint">Ini command sebenar yang app jalankan. Pelajar boleh copy &amp; run sendiri.</p>
+      <pre id="log"></pre>
+
+      <h2>Output</h2>
+      <pre id="output"></pre>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
