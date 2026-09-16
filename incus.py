@@ -1,6 +1,13 @@
 """Wrapper nipis untuk Incus CLI. Setiap command di-log supaya pelajar nampak."""
+import fcntl
 import json
+import os
+import pty
+import select
+import struct
 import subprocess
+import termios
+import threading
 from dataclasses import dataclass, field
 
 LOG: list[str] = []  # global command log, dipaparkan dalam UI
@@ -11,22 +18,27 @@ SCANNER = "lab-scanner"
 IMAGE = "images:debian/13"
 
 
-def _run(args: list[str], timeout: int = 120) -> tuple[int, str, str]:
+def _run(args: list[str], timeout: int = 120, log: bool = True) -> tuple[int, str, str]:
     """Jalankan command, log, return (rc, stdout, stderr)."""
     cmd = " ".join(args)
-    LOG.append(f"$ {cmd}")
+
+    def _append(line: str) -> None:
+        if log:
+            LOG.append(line)
+
+    _append(f"$ {cmd}")
     try:
         p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
         if p.stdout.strip():
-            LOG.append(p.stdout.strip())
+            _append(p.stdout.strip())
         if p.stderr.strip():
-            LOG.append(f"[stderr] {p.stderr.strip()}")
+            _append(f"[stderr] {p.stderr.strip()}")
         return p.returncode, p.stdout, p.stderr
     except subprocess.TimeoutExpired:
-        LOG.append(f"[timeout selepas {timeout}s]")
+        _append(f"[timeout selepas {timeout}s]")
         return 124, "", "timeout"
     except FileNotFoundError:
-        LOG.append("[error] incus CLI tak dijumpai")
+        _append("[error] incus CLI tak dijumpai")
         return 127, "", "incus not found"
 
 
@@ -42,7 +54,7 @@ class Container:
 
 def list_lab() -> list[Container]:
     """Senarai container yang bermula dengan 'lab-'."""
-    rc, out, _ = _run(["incus", "list", "--format", "json"])
+    rc, out, _ = _run(["incus", "list", "--format", "json"], log=False)
     if rc != 0:
         return []
     try:
@@ -111,7 +123,21 @@ def create_lab() -> None:
         "apt-get update && apt-get install -y nmap",
     ], timeout=300)
 
-    # 5. expose nginx target pada host 8081
+    # 5. install netcat + curl dalam scanner
+    _run([
+        "incus", "exec", SCANNER, "--", "bash", "-lc",
+        "export DEBIAN_FRONTEND=noninteractive; "
+        "apt-get update && apt-get install -y netcat-openbsd curl",
+    ], timeout=300)
+
+    # 6. install dnsutils (dig, nslookup)
+    _run([
+        "incus", "exec", SCANNER, "--", "bash", "-lc",
+        "export DEBIAN_FRONTEND=noninteractive; "
+        "apt-get install -y dnsutils",
+    ], timeout=300)
+
+    # 6. expose nginx target pada host 8081
     _run([
         "incus", "config", "device", "add", TARGET, "web",
         "proxy", "listen=tcp:127.0.0.1:8081",
@@ -164,3 +190,128 @@ def run_ip_neigh(container_name: str) -> tuple[int, str]:
     name = container_name if container_name.startswith(LAB_PREFIX) else f"{LAB_PREFIX}{container_name}"
     rc, out, err = _run(["incus", "exec", name, "--", "ip", "neigh"], timeout=15)
     return rc, out or err
+
+
+def run_ss(container_name: str) -> tuple[int, str]:
+    """Tunjukkan socket yang sedang LISTEN."""
+    name = container_name if container_name.startswith(LAB_PREFIX) else f"{LAB_PREFIX}{container_name}"
+    rc, out, err = _run(["incus", "exec", name, "--", "ss", "-tlnp"], timeout=15)
+    return rc, out or err
+
+
+def run_nc(container_name: str, host: str, port: int, timeout: int = 5) -> tuple[int, str]:
+    """Uji sambungan TCP dengan netcat (nc -z)."""
+    name = container_name if container_name.startswith(LAB_PREFIX) else f"{LAB_PREFIX}{container_name}"
+    rc, out, err = _run([
+        "incus", "exec", name, "--",
+        "nc", "-z", "-w", str(timeout), host, str(port)
+    ], timeout=timeout + 5)
+    return rc, out or err
+
+
+def run_curl(container_name: str, url: str) -> tuple[int, str]:
+    """Ambila output HTTP dengan curl."""
+    name = container_name if container_name.startswith(LAB_PREFIX) else f"{LAB_PREFIX}{container_name}"
+    rc, out, err = _run([
+        "incus", "exec", name, "--",
+        "curl", "-s", "-S", "-L", url
+    ], timeout=15)
+    return rc, out or err
+
+
+def run_dig(container_name: str, domain: str, record_type: str = "A") -> tuple[int, str]:
+    """Jalankan dig untuk domain tertentu."""
+    name = container_name if container_name.startswith(LAB_PREFIX) else f"{LAB_PREFIX}{container_name}"
+    rc, out, err = _run([
+        "incus", "exec", name, "--",
+        "dig", "+short", "-t", record_type, domain
+    ], timeout=15)
+    return rc, out or err
+
+
+def run_nslookup(container_name: str, domain: str) -> tuple[int, str]:
+    """Jalankan nslookup untuk domain tertentu."""
+    name = container_name if container_name.startswith(LAB_PREFIX) else f"{LAB_PREFIX}{container_name}"
+    rc, out, err = _run([
+        "incus", "exec", name, "--",
+        "nslookup", domain
+    ], timeout=15)
+    return rc, out or err
+
+
+class TerminalSession:
+    """Sesi terminal interaktif dalam container melalui pty + WebSocket."""
+
+    def __init__(self, container_name: str, emit, sid: str):
+        self.sid = sid
+        self._emit = emit
+        self._running = False
+        name = container_name if container_name.startswith(LAB_PREFIX) else f"{LAB_PREFIX}{container_name}"
+        self.master, slave = pty.openpty()
+        self.proc = subprocess.Popen(
+            ["incus", "exec", name, "--", "bash", "--login"],
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
+            preexec_fn=os.setsid,
+            env={**os.environ, "TERM": "xterm-256color"},
+            close_fds=True,
+        )
+        os.close(slave)
+        self._running = True
+        self._thread = threading.Thread(target=self._read_loop, daemon=True)
+        self._thread.start()
+
+    def _read_loop(self) -> None:
+        while self._running:
+            try:
+                ready, _, _ = select.select([self.master], [], [], 0.1)
+            except (OSError, ValueError):
+                break
+            if self.master not in ready:
+                continue
+            try:
+                data = os.read(self.master, 4096)
+            except OSError:
+                break
+            if not data:
+                break
+            self._emit(
+                "terminal_output",
+                {"data": data.decode("utf-8", errors="replace")},
+                room=self.sid,
+            )
+        self._running = False
+        self._emit("terminal_exit", {}, room=self.sid)
+
+    def write(self, data: str) -> None:
+        if self._running:
+            try:
+                os.write(self.master, data.encode("utf-8", errors="replace"))
+            except OSError:
+                pass
+
+    def resize(self, cols: int, rows: int) -> None:
+        try:
+            fcntl.ioctl(
+                self.master,
+                termios.TIOCSWINSZ,
+                struct.pack("HHHH", rows, cols, 0, 0),
+            )
+        except OSError:
+            pass
+
+    def close(self) -> None:
+        self._running = False
+        try:
+            os.close(self.master)
+        except OSError:
+            pass
+        try:
+            self.proc.terminate()
+            self.proc.wait(timeout=2)
+        except (subprocess.TimeoutExpired, ProcessLookupError):
+            try:
+                self.proc.kill()
+            except ProcessLookupError:
+                pass

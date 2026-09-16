@@ -31,9 +31,9 @@ incus-lab/
 Every Incus command is logged (`incus.py` LOG list) so students can see exactly what command was run and its output. The UI surfaces this log alongside results.
 
 ## Roadmap
-- **PHASE 1** — Connectivity: ping, ip addr, ip route, ip neigh
-- **PHASE 2** — Ports & Services: nmap, ss, nc, curl
-- **PHASE 3** — DNS: dig, nslookup, DNS records
+- **PHASE 1** ✅ Connectivity: ping, ip addr, ip route, ip neigh
+- **PHASE 2** ✅ Ports & Services: nmap, ss, nc, curl
+- **PHASE 3** ✅ DNS: dig, nslookup, DNS records
 - **PHASE 4** — Routing: traceroute, routing table, multi-hop topology
 - **PHASE 5** — Packet: tcpdump, ICMP, ARP, TCP SYN, DNS packet
 - **PHASE 6** — Troubleshooting: ping fails, DNS fails, port closed, service stopped, wrong route

@@ -25,5 +25,5 @@ fi
 ./.venv/bin/pip install -q -r requirements.txt
 
 # 4. jalan
-echo "Incus Lab: http://127.0.0.1:8080"
+echo "Incus Lab: http://127.0.0.1:8081"
 exec ./.venv/bin/python app.py
