@@ -183,16 +183,7 @@ incus-lab/
 
 ---
 
-## 8. Pembangunan (Untuk Penyumbang)
 
-### Struktur State Projek (Brain)
-```
-.agents/brain/
-├── task.md          # Ledger tugas (Current/Completed/Blocked/Next)
-├── walkthrough.md   # Sejarah session (Mental Anchor = entry teratas)
-├── architecture.md  # Ringkasan stack & roadmap
-└── decisions/       # ADR keputusan arkitektonik
-```
 
 ### Perintah Pembangun
 ```bash
@@ -208,7 +199,7 @@ node --check static/app.js
 
 ---
 
-## 9. Lesen
+## 8. Lesen
 Projek ini dikongsi untuk tujuan pembelajaran. Sila rujuk fail `LICENSE` (jika ada) untuk terma penggunaan.
 
 ---
