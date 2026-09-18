@@ -8,3 +8,4 @@ venv/
 # OS / editor
 .DS_Store
 *.swp
+.agents/brain/
